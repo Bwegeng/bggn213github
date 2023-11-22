@@ -1,4 +1,3 @@
 # bggn213github
-my class work
-
+my class work at UC San Diego
 
