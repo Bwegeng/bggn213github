@@ -1,0 +1,160 @@
+---
+title: "Class14_RNAseq mini project"
+format: pdf
+toc: true
+---
+```{r}
+library(DESeq2)
+```
+
+```{r}
+metaFile <- "GSE37704_metadata.csv"
+countFile <- "GSE37704_featurecounts.csv"
+```
+
+```{r}
+colData = read.csv(metaFile, row.names=1)
+head(colData)
+```
+
+```{r}
+countData = read.csv(countFile, row.names=1)
+head(countData)
+```
+
+```{r}
+countData <- as.matrix(countData[,-1])
+head(countData)
+```
+
+
+
+```{r}
+nrow(countData)
+```
+ - Find the rowSums() this will be zero for any genes with no count data
+ - Find the zero sum genes
+ - Remove them before doing our DESeq
+ 
+```{r}
+!c(T,F,T)
+```
+
+ 
+
+ 
+```{r}
+to.rm.ind <- rowSums(countData) == 0
+countData <- countData[!to.rm.ind,]
+head(countData)
+```
+
+```{r}
+dds = DESeqDataSetFromMatrix(countData=countData,
+                              colData=colData,
+                              design=~condition)
+dds = DESeq(dds)
+```
+
+Now run our main DESeq analysis:
+
+```{r}
+#| message: false
+
+dds <- DESeq(dds)
+res <- results(dds)
+head(res)
+```
+
+```{r}
+summary(res)
+```
+
+```{r}
+plot( res$log2FoldChange, -log(res$padj) )
+```
+
+Let's add some color and annotation data to this plot.
+
+```{r}
+library(AnnotationDbi)
+library(org.Hs.eg.db)
+```
+
+```{r}
+columns(org.Hs.eg.db)
+```
+
+```{r}
+head(row.names(countData))
+```
+
+
+```{r}
+res$symbol <- mapIds(org.Hs.eg.db,
+                    keys=row.names(countData),
+                    keytype="ENSEMBL",
+                    column="SYMBOL",
+                    multiVals="first")
+
+res$entrez <- mapIds(org.Hs.eg.db,
+                    keys=row.names(countData),
+                    keytype="ENSEMBL",
+                    column="ENTREZID",
+                    multiVals="first")
+head(res)
+```
+
+```{r}
+#| message: false
+library(gage)
+library(gageData)
+library(pathview)
+```
+
+The `gage()` function wants a "vector of importance" in our case here it will be fold-change values with associated entrez gene names.
+
+```{r}
+foldchange <- res$log2FoldChange
+names(foldchange) <- res$entrez
+```
+
+```{r}
+data("kegg.sets.hs")
+keggres = gage(foldchange, gsets=kegg.sets.hs)
+```
+
+```{r}
+head(keggres$less)
+```
+
+```{r}
+pathview(gene.data=foldchange, pathway.id="hsa00230")
+```
+
+![Purine Metabolism hsa00230](hsa00230.pathview.png)
+
+
+
+```{r}
+data(go.sets.hs)
+data(go.subs.hs)
+gobpsets = go.sets.hs[go.subs.hs$BP]
+
+gobpres = gage(foldchange, gsets=gobpsets,)
+```
+
+```{r}
+head(gobpres$less)
+```
+
+We will use the online version of Reactome. It wants a list of your genes. We will write this out from R here:
+
+```{r}
+sig_genes <- res[res$padj <= 0.05 & !is.na(res$padj), "symbol"]
+write.table(sig_genes, file="significant_genes.txt", row.names=FALSE, col.names=FALSE, quote=FALSE)
+```
+
+https://reactome.org/PathwayBrowser/#TOOL=AT
+
+
